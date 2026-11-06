@@ -1,0 +1,43 @@
+dataset,T_C,catalyst,duration,flag,D13_raw,D13,SE13_used,D12_raw,D12,SE12_used
+CAL1549,450,Pt/Al2O3,~hours,Good,,-5.27,0.31,,-7.55,3.2
+CAL1549,450,Pt/Al2O3,~hours,Bad,,-3.62,0.32,,-0.75,2.2
+CAL1549,350,Pt/Al2O3,~hours,Good,,-3.89,0.33,,-3.54,2.1
+CAL1549,250,Pt/Al2O3,~days,Good,,-3.79,0.23,,-4.96,1.5
+CAL1549,150,γ-Al2O3,~days,Good,,-2.48,0.24,,-0.99,1.6
+CAL1549,100,γ-Al2O3,~days,Good,,-0.98,0.49,,4.94,1.8
+CAL1549,50,γ-Al2O3,6 weeks,Bad,,-2.02,0.58,,17.34,3.1
+CAL1549,50,γ-Al2O3,6 weeks,Good,,-1.37,0.25,,7.42,1.7
+CAL1549,25,γ-Al2O3,2 months,Bad,,,,,,
+CAL1549,25,γ-Al2O3,2 months,Bad,,0.83,0.4,,-1.47,1.8
+CAL1549,25,γ-Al2O3,2 months,Bad,,0.32,0.28,,-2.66,7
+CAL1549,-20,γ-Al2O3,5 months,Good,6.56,0.18,0.49,28.23,19.8,2.7
+AP613 (Dasgupta 2025),550,Pt/Al2O3,1 week,Good,,0.24,0.47,,-3.59,2.6
+AP613 (Dasgupta 2025),550,Pt/Al2O3,1 week,Good,,-0.66,0.46,,4.63,3.3
+AP613 (Dasgupta 2025),150,γ-Al2O3,7 days,Good,,3.02,0.26,,8.55,1.8
+AP613 (Dasgupta 2025),125,γ-Al2O3,3 days,Good,,,,,,
+AP613 (Dasgupta 2025),100,γ-Al2O3,2 days,Good,,5.02,0.61,,12.76,2.6
+AP613 (Dasgupta 2025),50,γ-Al2O3,1 month,Good,,4.72,0.34,,15.81,4.3
+AP613 (Dasgupta 2025),4,γ-Al2O3,~7 months,Bad,,2.67,0.28,,1.59,2.4
+AP613 (Dasgupta 2025),4,γ-Al2O3,~1 year,Good,,,,,,
+AP613 (Dasgupta 2025),-20,γ-Al2O3,~3 months,Bad,,3.45,0.39,,3.1,1.7
+AP613 (Dasgupta 2025),-20,γ-Al2O3,~5 months,Good,,6.25,0.23,,24.55,1.2
+AP613 (Dasgupta 2025),-20,γ-Al2O3,~5 months,Good,,6.65,0.26,,26.88,2.1
+AP613 (Dasgupta 2025),-20,γ-Al2O3,None,Good,,,,,,
+AP613 (Dasgupta 2025),-20,γ-Al2O3,None,Good,,,,,,
+Sivan23 (2021 campaign),50,γ-Al2O3,624 hours,Good,3.17,5.44,0.4,10.73,13.49,1.7
+Sivan23 (2021 campaign),150,γ-Al2O3,66 hours,Good,0.86,3.13,0.3,4.81,7.56,2.3
+Sivan23 (2021 campaign),250,Pt/Al2O3,120 hours,Good,-0.31,1.95,0.3,4.02,6.77,2.6
+Sivan23 (2021 campaign),300,Pt/Al2O3,64 hours,Good,-0.69,1.57,0.3,0.97,3.71,2
+Sivan23 (2021 campaign),350,Pt/Al2O3,144 hours,Good,-0.64,1.62,0.3,-2.44,0.29,2.4
+Sivan23 (2021 campaign),400,Pt/Al2O3,108 hours,Good,-1.14,1.12,0.2,-0.08,2.66,1.6
+Eldridge19 (Table 2 means),500,Ni,1−4,Good,,0.76,0.06,,-0.06,0.64
+Eldridge19 (Table 2 means),400,Ni,4−6,Good,,1.45,0.36,,3.45,0.28
+Eldridge19 (Table 2 means),350,Ni,9−12,Good,,1.46,0.1,,3.44,1.21
+Eldridge19 (Table 2 means),300,Ni,24−65,Good,,1.26,0.11,,1.86,1.21
+Eldridge19 (Table 2 means),250,Ni,72−184,Good,,2.27,0.19,,5,1.43
+Eldridge19 (Table 2 means),165.4,γ-Al2O3,6.5−8.5,Good,,2.94,0.21,,8.88,1.01
+Eldridge19 (Table 2 means),127.8,γ-Al2O3,23−25.5,Good,,3.36,0.08,,9.64,0.41
+Eldridge19 (Table 2 means),75.7,γ-Al2O3,233−288,Good,,4.48,0.15,,14.05,1.39
+Eldridge19 (Table 2 means),50.5,γ-Al2O3,292−478.5,Good,,5.09,0.17,,14.09,0.33
+Eldridge19 (Table 2 means),25,γ-Al2O3,551−622,Good,,5.64,0.05,,19.64,0.67
+Eldridge19 (Table 2 means),1.2,γ-Al2O3,503.5−816,Good,,7.02,0.06,,23.5,1.09
