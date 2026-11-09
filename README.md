@@ -8,7 +8,7 @@ Calibrating the thermometer requires producing CH₄ in known isotopic equilibri
 2. The experimental heating setup
 AP613 and CAL1549 — commercially pure CH₄ reference cylinders with known bulk isotopic compositions — are used as working gases. For each calibration point, approximately 10 catalyst pellets are loaded into a 20 mL borosilicate glass tube fitted with a yellow Teflon stopper (or a flame-sealed borosilicate nozzle for multi-month runs). The tube is evacuated to 10⁻³ mbar, oxygen-burned at 550 °C for 5 h to activate the catalyst, re-evacuated overnight, and then filled with pure CH₄ before being set to the target equilibration temperature.
 Two catalysts cover the full temperature range:
-•	γ-Al₂O₃ for temperatures below 200 °C (as low as −18 °C in our protocol)
+•	γ-Al₂O₃ for temperatures below 200 °C (as low as −20 °C in our protocol)
 •	Pt/Al₂O₃ for 200–550 °C
 Once equilibration is complete, the tube is connected to the High-Concentration Extraction System (HCES). The extracted CH₄ is passed through two GC columns (5 Å molecular sieve + HayeSep D), cryogenically collected on silica gel, and the purity verified by the TCD chromatogram — negligible O₂ and N₂ peaks confirm no atmospheric contamination. The purified gas is then transferred to the 253 Ultra isotope-ratio mass spectrometer for measurement of Δ¹³CH₃D and Δ¹²CH₂D₂.
 3. The two theoretical models
@@ -21,7 +21,7 @@ PIMC is the ground-truth model, but it has been computed only over 270–800 K (
 3.3 Why not improve BMU with DFT corrections?
 Liu & Liu (2016) applied ex post facto anharmonic corrections to harmonically computed BMU RPFRs (using MP2/aug-cc-pVTZ). Individual PFR errors were substantially reduced, yet the final Δ values became worse by 0.2–0.4‰ relative to PIMC. The corrections disrupted the precise error cancelation without fully correcting its source. BMU corrections remain reaction-specific and structurally unreliable; PIMC is the only approach that is correct at the level of the partition function itself.
 4. How we link PIMC and BMU in practice
-Our calibration covers −18 to 550 °C. The PIMC polynomials are valid only down to −3 °C (270 K). For temperatures at or below −3 °C, we established a linear mapping between PIMC and BMU (B3LYP/6-311++G**) using data in the overlapping range 283–423 K:
+Our calibration covers −20 to 550 °C. The PIMC polynomials are valid only down to −3 °C (270 K). For temperatures at or below −3 °C, we established a linear mapping between PIMC and BMU (B3LYP/6-311++G**) using data in the overlapping range 283–423 K:
 ln(K¹³CH₃D)ᴘᴵᴹᴶ = 1.03372 × ln(K¹³CH₃D)ᴮᴹᵁ + 0.07769 × 10⁻³
 ln(⁸⁄₃ K¹²CH₂D₂)ᴘᴵᴹᴶ = 0.94297 × ln(⁸⁄₃ K¹²CH₂D₂)ᴮᴹᵁ + 0.02904 × 10⁻³
 BMU values below −3 °C are passed through these relationships to produce PIMC-equivalent extrapolations. This hybrid approach (PIMC where valid, PIMC-corrected BMU elsewhere) mirrors the strategy in Image 1 of the calibration plot, where the “Hybrid” curve joins BMU(T) for T < 270 K to PIMC(T) for T ≥ 270 K.
@@ -38,6 +38,6 @@ Key observations:
 •	Slopes are within 3σ of unity for all individual datasets, indicating no significant deviation from the theoretical temperature dependence.
 •	Intercepts reflect the working gas offset and are consistent between 2021 and 2025 for AP613.
 •	No systematic shift between the two experimental campaigns is detected, confirming long-term reproducibility of the equilibration protocol.
-Together, these results demonstrate that our revised protocol for −18 to 550 °C produces equilibrated gases fully consistent with PIMC-based theory, and that the calibration is stable across laboratories and years.
+Together, these results demonstrate that our revised protocol for −20 to 550 °C produces equilibrated gases fully consistent with PIMC-based theory, and that the calibration is stable across laboratories and years.
 
-References: Eldridge et al. (2019) ACS Earth Space Chem. 3:2747–2764 • Webb & Miller (2014) J. Phys. Chem. A 118:467–474 • Liu & Liu (2016) GCA 175:252–270 • Sivan et al. (2024) AMT 17:2687–2705 • York et al. (2004) Am. J. Phys. 72:367
+References: Eldridge et al. (2019) ACS Earth Space Chem. 3:2747–2764 • Webb & Miller (2014) J. Phys. Chem. A 120:467–474 • Liu & Liu (2016) GCA 175:252–270 • Sivan et al. (2024) AMT 17:2687–2705 • York et al. (2004) Am. J. Phys. 72:367
