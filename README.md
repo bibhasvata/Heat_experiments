@@ -90,6 +90,22 @@ The 2021 raw→absolute shift is **measured from the CSV**: corrected − raw = 
 
 The AP613 offsets in 2021 and 2025 are not systematically different: on the absolute scale the 2025−2021 campaign difference at T ≥ 270 K is **−0.311 ± 0.297 ‰ for Δ¹³CH₃D (z = −1.05, p = 0.30)** and **+0.430 ± 1.494 ‰ for Δ¹²CH₂D₂ (z = 0.29, p = 0.77)**; the ANCOVA intercept difference is −0.430 ± 0.239 ‰ (p = 0.11). A drift of a few tenths of a permil is the central value and is unresolved — calibration stability over four years is confirmed at that level.
 
+### 5a. Measurement scales: what is actually measured
+
+- **Eldridge et al. (2019)** and **Sivan et al. (2024)** are independent studies that reported anomalies on the **absolute (thermodynamic) scale**. Eldridge's house gas was assigned from the PIMC curve itself, so its offset is ≈ 0 by construction; the Eldridge rows are a consistency check, never a test of PIMC.
+- **AP613 2021 (Sivan et al. 2024)**: the CSV carries both frames — `D13_raw`/`D12_raw` (instrument working-gas frame) and `D13`/`D12` = raw + 2.2633 / +2.7450 ‰ (absolute; the shift measured on these six rows). The raw-frame Method-1 offset (−2.263 / −3.260 ‰) is the AP613 cylinder's clumped anomaly on the absolute scale.
+- **This study (2025)**: the new AP613 tubes (Good points: 50, 100, 150 °C plus two 550 °C tubes) and CAL1549 (Good points: 50–450 °C, the full range) were measured with **Sivan's AP613 as the instrument reference gas**, so the 2025 values are relative to AP613 — absolute values were not measured. Their "absolute" column is derived by adding the 2021 shift, so the 2025 working-gas offset is conditional on that shift: for Δ¹³CH₃D the CSV shift (+2.2633) equals −(2021 offset) to 0.0001 ‰, but for Δ¹²CH₂D₂ it differs by 0.51 ‰ (both variants are reported in the manifest; only the CSV shift is used).
+
+### 5b. The three AP613 interpretations
+
+| version | Good points | offset Δ¹³CH₃D (frame) | slope Δ¹³CH₃D | role |
+|---|---|---|---|---|
+| AP613 2021 only (Sivan) | 6, 50–400 °C, raw frame | −2.263 ± 0.115 (wg) | 1.062 ± 0.102 | primary — the 2021 anchor |
+| AP613 2025 only (this study) | 5, 50–550 °C (two 550 °C tubes), absolute frame | −0.312 ± 0.274 abs = −2.575 ± 0.274 wg | 1.173 ± 0.171 | primary — weakest alone (550 °C bulk-composition outlier: dropping both moves m by −0.28; Δ¹² CI 0.26–2.11) |
+| AP613 extended (pooled) | 11, −20–550 °C, absolute frame | −0.100 ± 0.115 (abs) | 1.067 ± 0.085 | consistency / continuity statement — nests the 2021 anchor, so not an independent slope test |
+
+Continuity of the Utrecht reference gas is shown by the campaign comparison, not by pooling: 2025 − 2021 at T ≥ 270 K is −0.311 ± 0.297 ‰ (Δ¹³CH₃D, z = −1.05, 95 % CI −0.89…+0.27) and +0.430 ± 1.494 ‰ (Δ¹²CH₂D₂, z = 0.29); zero lies inside both intervals, so pooling is statistically permissible, but a drift of a few tenths of a permil is not excluded. **Recommendation:** keep the three gases separate in the six-test primary family, quote the campaign difference as the continuity evidence, and use AP613 extended only as the pooled consistency fit.
+
 ## 6. Regression against theory and key results
 
 Offset-corrected values are regressed against the reference curve with two weighted least-squares methods (measurement SEs only — the ±2 °C temperature error is **not** in the fit weights; its effect is quantified separately in Table S12):
@@ -107,7 +123,7 @@ Offset-corrected values are regressed against the reference curve with two weigh
 | AP613 extended (consistency) | 1.067 ± 0.085 | +0.79, 0.45 | 0.899 ± 0.127 | −0.80, 0.45 |
 | Eldridge means (consistency) | 1.037 ± 0.031 | +1.23, 0.25 | 0.872 ± 0.053 | −2.41, 0.04 |
 
-The confirmatory family is the 6 primary tests (3 working gases × 2 isotopologues); adjusted p = min(1, 6p). The smallest unadjusted primary p is 0.235, so the smallest adjusted p is **1.00** — **no dataset shows a significant deviation of the slope from unity**. Inverse-variance pools of the primary slopes: Δ¹³CH₃D **1.038 ± 0.075**, Δ¹²CH₂D₂ **0.931 ± 0.100** (both consistent with 1). The Eldridge Table-2 mean-fit slopes (refit here) do not reproduce the published Δ¹²CH₂D₂ slope 0.98 ± 0.05, which was fit to individual analyses, and because Eldridge's house-gas anomalies were assigned from this same PIMC curve, the Eldridge rows are a consistency check, not a test of the curve (Table S9: working-gas offsets recomputed here 2.61 ± 0.07 / 5.87 ± 0.45 ‰ vs published 2.59 ± 0.14 / 5.86 ± 0.6 ‰).
+The confirmatory family is the 6 primary tests (3 working gases × 2 isotopologues); adjusted p = min(1, 6p). The smallest unadjusted primary p is 0.235, so the smallest adjusted p is **1.00** — **none of the six primary slopes is distinguishable from 1 after the pre-declared correction; several intervals are wide (AP613 2021 Δ¹²CH₂D₂ 95 % CI 0.385–1.203), and a CI that contains 1 is not a demonstration that the slope is 1**. All-temperature (all-Good) and ln-space refits are sensitivities, not members of the confirmatory family. Inverse-variance pools of the primary slopes: Δ¹³CH₃D **1.038 ± 0.075**, Δ¹²CH₂D₂ **0.931 ± 0.100** (both consistent with 1). The Eldridge Table-2 mean-fit slopes (refit here) do not reproduce the published Δ¹²CH₂D₂ slope 0.98 ± 0.05, which was fit to individual analyses, and because Eldridge's house-gas anomalies were assigned from this same PIMC curve, the Eldridge rows are a consistency check, not a test of the curve (Table S9: working-gas offsets recomputed here 2.61 ± 0.07 / 5.87 ± 0.45 ‰ vs published 2.59 ± 0.14 / 5.86 ± 0.6 ‰).
 
 **Sensitivities (Table S4, S11):** refits using all Good points including T < 270 K, the extrapolated-PIMC low-T curve, and 1000·ln(1 + Δ/1000) space; leave-one-out of the two Good AP613 −20 °C points (dropping both moves the extended Δ¹³CH₃D slope from 0.868 to 1.067; dropping one moves it ≤ 0.06 — the two single-point changes do not add); and dropping the 550 °C tubes (different bulk composition) moves the AP613 2025 Δ¹³CH₃D slope by −0.28 and its offset by +0.21 ‰.
 
