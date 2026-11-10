@@ -10,7 +10,7 @@ Methane contains rare doubly-substituted isotopologues, ¹³CH₃D and ¹²CH₂
 
 Calibrating the thermometer requires producing CH₄ in known isotopic equilibrium across a wide temperature range and anchoring those measurements to a physically rigorous theoretical prediction. Three separate things must therefore agree: the experiments, the mass-spectrometric measurements, and the theory.
 
-**Data policy (Good-only).** Rows flagged `Bad` in the CSV are dropped at load and appear in no fit, figure, or table. Of the 36 CSV rows, 30 Good rows are used; the 6 dropped Bad rows are: CAL1549 at 450 °C, 50 °C, and 2 × 25 °C, and AP613 2025 at 4 °C and −20 °C (~3 months). One Good row — CAL1549 at −20 °C — is additionally *withheld from every fit* (it is the only row carrying a raw value, and its corrected−raw, ≈ −6.4 / −8.4 ‰, is not the working-gas shift); it stays in the tables and figures as an open symbol.
+**Data policy (Good-only).** Rows flagged `Bad` in the CSV are dropped at load and appear in no fit or figure; they are listed once, in Table S7, with the values as recorded and their residuals from the reference curve. Of the 37 CSV rows read, 31 are Good and 30 enter the fits; the 6 dropped Bad rows are: CAL1549 at 450 °C, 50 °C, and 2 × 25 °C, and AP613 2025 at 4 °C and −20 °C (~3 months). One Good row — CAL1549 at −20 °C — is additionally *withheld from every fit* (it is the only row carrying a raw value, and its corrected−raw, ≈ −6.4 / −8.4 ‰, is not the working-gas shift); it stays in the tables and figures as an open symbol.
 
 ## 2. The experimental heating setup
 
@@ -51,7 +51,7 @@ Liu & Liu (2016) applied ex post facto anharmonic corrections to harmonically co
 Our calibration covers −20 to 550 °C, but the PIMC polynomials are valid only down to 270 K. The reference curve used throughout is therefore **hybrid**:
 
 - **T ≥ 270 K:** the PIMC polynomial itself.
-- **T < 270 K:** a 5th-order polynomial in 1/T with **no constant term** (the anomaly is 0 at infinite temperature), least-squares fitted to the Eldridge et al. (2019) **Table 4 BMU values** (32 points, −3.1 to 526.9 °C; fit RMS 0.0013 ‰ for Δ¹³CH₃D and 0.0035 ‰ for Δ¹²CH₂D₂), shifted by a constant bridge
+- **T < 270 K:** a 5th-order polynomial in 1/T with **no constant term** (the anomaly is 0 at infinite temperature), least-squares fitted to the Eldridge et al. (2019) **Table 4 BMU values** (33 points, −3.1 to 526.9 °C; fit RMS 0.0013 ‰ for Δ¹³CH₃D and 0.0035 ‰ for Δ¹²CH₂D₂), shifted by a constant bridge
   **δ = mean(PIMC − BMU fit) over every integer kelvin from 283 to 423 K**: δ = **+0.0494 ‰ (Δ¹³CH₃D)**, **+0.0547 ‰ (Δ¹²CH₂D₂)**.
 
 > Note: an earlier version of this note bridged PIMC ↔ BMU with a ln–ln linear map fitted on 283–423 K. That mapping is superseded. The current implementation fits the BMU Table-4 values directly and shifts by the grid-mean offset, which keeps the low-T branch anchored to the published BMU numbers rather than to a regression between two models.
@@ -60,10 +60,11 @@ Our calibration covers −20 to 550 °C, but the PIMC polynomials are valid only
 
 **Known systematic — the 270 K join is not continuous.** Because PIMC − BMU is temperature-dependent but δ is a constant, the reference curve steps at 270 K by **+0.019 ‰ (Δ¹³CH₃D)** and **−0.374 ‰ (Δ¹²CH₂D₂)** (above minus below). The Δ¹²CH₂D₂ step is comparable to the offset standard errors; residuals, derivatives, and curve inversions across the join must be read with this in mind. The step is printed at runtime and recorded in the workbook manifest.
 
-**Theory envelope at 253.15 K** (bracketing the bridge choice — grid-mean bridges on 283–423, 270–400, and 300–450 K windows, a value-match at 270 K, and the extrapolated PIMC polynomial):
+**Theory envelope at 253.15 K** (bracketing the bridge choice — grid-mean bridges on 283–423, 270–400, and 300–450 K windows, a value-match at 270 K, the continuous 1/T bridge forced through 270 K (`--bridge smooth`), and the extrapolated PIMC polynomial):
 
 - Δ¹³CH₃D: **7.527 – 7.766 ‰** (spread 0.24 ‰)
 - Δ¹²CH₂D₂: **27.243 – 27.855 ‰** (spread 0.61 ‰)
+- Continuous 1/T bridge at 253.15 K: **7.551 ‰ (Δ¹³CH₃D)**, **27.326 ‰ (Δ¹²CH₂D₂)** — inside the envelope; Table S6 lists it as a row
 
 The local slope of the reference curve at 253.15 K is **−0.0460 ‰/K (Δ¹³CH₃D)** and **−0.2255 ‰/K (Δ¹²CH₂D₂)**, so a ±2 °C temperature error moves the reference by ±0.09 ‰ / ±0.45 ‰ there (Table S12) — much larger than the ≤ 0.23 ‰ sometimes quoted for Δ¹²CH₂D₂ at warmer temperatures.
 
@@ -94,7 +95,7 @@ The AP613 offsets in 2021 and 2025 are not systematically different: on the abso
 
 - **Eldridge et al. (2019)** and **Sivan et al. (2024)** are independent studies that reported anomalies on the **absolute (thermodynamic) scale**. Eldridge's house gas was assigned from the PIMC curve itself, so its offset is ≈ 0 by construction; the Eldridge rows are a consistency check, never a test of PIMC.
 - **AP613 2021 (Sivan et al. 2024)**: the CSV carries both frames — `D13_raw`/`D12_raw` (instrument working-gas frame) and `D13`/`D12` = raw + 2.2633 / +2.7450 ‰ (absolute; the shift measured on these six rows). The raw-frame Method-1 offset (−2.263 / −3.260 ‰) is the AP613 cylinder's clumped anomaly on the absolute scale.
-- **This study (2025)**: the new AP613 tubes (Good points: 50, 100, 150 °C plus two 550 °C tubes) and CAL1549 (Good points: 50–450 °C, the full range) were measured with **Sivan's AP613 as the instrument reference gas**, so the 2025 values are relative to AP613 — absolute values were not measured. Their "absolute" column is derived by adding the 2021 shift, so the 2025 working-gas offset is conditional on that shift: for Δ¹³CH₃D the CSV shift (+2.2633) equals −(2021 offset) to 0.0001 ‰, but for Δ¹²CH₂D₂ it differs by 0.51 ‰ (both variants are reported in the manifest; only the CSV shift is used).
+- **This study (2025)**: the new AP613 tubes (Good points: 50, 100, 150 °C plus two 550 °C tubes) and CAL1549 (Good points: 50–450 °C, the full range) were measured against unheated gas from the same cylinder, as in 2021, so the measured anomalies are in each cylinder's working-gas frame. The CSV stores them in the absolute frame by adding the 2021 shift, so the 2025 working-gas offset is conditional on that shift: for Δ¹³CH₃D the CSV shift (+2.2633) equals −(2021 offset) to 0.0001 ‰, but for Δ¹²CH₂D₂ it differs by 0.51 ‰ (both variants are reported in the manifest; only the CSV shift is used).
 
 ### 5b. The three AP613 interpretations
 
@@ -127,6 +128,8 @@ The confirmatory family is the 6 primary tests (3 working gases × 2 isotopologu
 
 **Sensitivities (Table S4, S11):** refits using all Good points including T < 270 K, the extrapolated-PIMC low-T curve, and 1000·ln(1 + Δ/1000) space; leave-one-out of the two Good AP613 −20 °C points (dropping both moves the extended Δ¹³CH₃D slope from 0.868 to 1.067; dropping one moves it ≤ 0.06 — the two single-point changes do not add); and dropping the 550 °C tubes (different bulk composition) moves the AP613 2025 Δ¹³CH₃D slope by −0.28 and its offset by +0.21 ‰.
 
+**Temperature-error sensitivity (Table S14, `--sigma-T 2.0`).** With a ±2 K equilibration-temperature error added in effective-variance weights, the T ≥ 270 K offsets change by at most 0.009 ‰ and the slopes by at most 0.003; the all-Good fits change by at most 0.089 ‰ and 0.004. At −20 °C a ±2 °C error moves the reference by 0.09 ‰ (Δ¹³CH₃D) and 0.45 ‰ (Δ¹²CH₂D₂) (Table S12). For the Eldridge Δ¹²CH₂D₂ refit the slope moves from 0.872 to 0.881, so a 2 K error does not explain the gap to the published 0.98 ± 0.05.
+
 ## 7. Low-temperature results (−20 °C): a kinetic constraint, not a calibration point
 
 Good AP613 2025 aliquots at −20 °C (253.15 K, absolute frame): Δ¹³CH₃D = 6.25 ± 0.23 and 6.65 ± 0.26 ‰; Δ¹²CH₂D₂ = 24.55 ± 1.2 and 26.88 ± 2.1 ‰ (the two rows share one duration string, "~5 months", and may be replicates of one tube). Against the reference at 253.15 K plus the 2025 offset, the mean residuals are **−0.79 ± 0.32 ‰ (Δ¹³CH₃D, z = −2.4)** and **−2.60 ± 1.63 ‰ (Δ¹²CH₂D₂, z = −1.6)**. Under a monotonic approach from below, an incomplete experiment is only a **lower bound** on the equilibrium anomaly: the recommended bound is **6.08 ‰** for Δ¹³CH₃D (higher-aliquot bound 6.08, replicate-mean bound 6.09), which inverts to an apparent temperature of **+16.5 °C** on the reference curve; the reference curve equals the extrapolated PIMC(253.15 K) at −25.1 °C. The CAL1549 −20 °C row is withheld from all fits: raw 6.56 / 28.23 ‰, fitted-absolute 6.06 / 28.11 ‰.
@@ -140,12 +143,12 @@ The 68 % temperature interval is obtained by Monte Carlo inversion of the refere
 ## 9. Outputs and how to run
 
 ```
-python3 make_AMT_outputs.py [--csv calibration_data_table.csv] [--out AMT/] [--json results_summary.json]
+python3 make_AMT_outputs.py [--csv calibration_data_table.csv] [--out AMT/] [--json results_summary.json] [--bridge const|smooth] [--sigma-T 2.0] [--dpi 300] [--mc-draws 20000] [--t-grid 50,100,150,200,300]
 ```
 
 Requires numpy, matplotlib, openpyxl. The optional JSON is used **only** for the published Eldridge benchmark numbers in Table S9; the reference curve, offsets, slopes, and low-temperature bounds are always recomputed from the CSV, so a stale JSON cannot move the curve.
 
-Figures (PDF + PNG, 300 dpi): `Fig1_Delta_vs_T`, `Fig2_residuals_vs_T`, `FigS1_method2_regression`, `FigS2_shifted_by_offset`, `FigS3_low_temperature`. Tables: `AMT_tables.xlsx` with a Manifest sheet plus Table 1 (calibration summary), Table 2 (experiments ≤ 25 °C with residuals, offset-aware z, Eq. 5 fractions), and Tables S1–S12 (protocol/durations, Method-1 offsets, all-Good Method-2, four slope sensitivities, campaign comparison, low-T inferences, withheld rows, Monte-Carlo temperature intervals, Eldridge benchmark, pooled slopes, leverage sensitivities, reference-curve slopes).
+Figures (PDF + PNG, 300 dpi): `Fig1_Delta_vs_T`, `Fig2_residuals_vs_T`, `FigS1_method2_regression`, `FigS2_shifted_by_offset`, `FigS3_low_temperature`. Tables: `AMT_tables.xlsx` with a Manifest sheet, a Figure captions sheet and 16 tables: Table 1 (calibration summary), Table 2 (experiments ≤ 25 °C with residuals, offset-aware z, Eq. 5 fractions), and Tables S1–S14 — S1 protocol/durations, S2 Method-1 offsets, S3 all-Good Method-2, S4 slope sensitivities (all/valid/alt/ln), S5 campaign comparison, S6 low-temperature inferences and theory envelope, S7 excluded rows (the withheld CAL1549 −20 °C row and the six Bad rows with values as recorded and residuals, plus the descriptive flag check), S8 Monte-Carlo temperature intervals, S9 Eldridge benchmark, S10 pooled slopes, S11 leverage sensitivities (550 °C drop, leave-one-out), S12 reference-curve slopes, S13 reference series, S14 temperature-error sensitivity (`--sigma-T`).
 
 In figures, filled symbols are Good points in the T ≥ 270 K offset fit; open symbols are Good points below 270 K or the withheld CAL1549 −20 °C row; the grey band marks T < 270 K.
 
