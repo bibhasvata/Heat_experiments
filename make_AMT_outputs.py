@@ -2,7 +2,9 @@
 """
 make_AMT_outputs.py - static AMT figures and tables from calibration_data_table.csv.
 GOOD-ONLY REVISION: rows flagged "Bad" are dropped at load and appear in no
-fit, no figure and no table.  The only non-filled symbols left are points
+fit and no figure.  They are listed once, in Table S7, with the values as
+recorded and their residuals from the reference curve, so that the QC flag can
+be checked against the residuals.  The only non-filled symbols left are points
 below 270 K and the withheld CAL1549 -20 C row.
 
 Self-contained: the ONLY required input is the CSV next to this script
@@ -16,11 +18,18 @@ Reference curve
   PIMC polynomials of Eldridge et al. (2019) at T >= 270 K.
   Below 270 K, a 5th-order polynomial in 1/T fitted to their Table 4 BMU
   values with no constant term (the anomaly is 0 at infinite T), shifted by
-  delta = mean(PIMC - BMU fit) on every integer kelvin from 283 to 423.
+  delta = mean(PIMC - BMU fit) on every integer kelvin from 283 to 423
+  (default, --bridge const).  --bridge smooth replaces the constant by
+  delta(T) = d270 + b (1/T - 1/270), linear in 1/T, forced through the PIMC - BMU
+  value at 270 K (no step at the join) and fitted on integer kelvin 270 to 423.
+  Whatever the choice, the other bridge is reported as a member of the theory
+  envelope (Table S6), and Table S14 shows the effect of the equilibration-
+  temperature error (--sigma-T) on the offsets and slopes.
 
 What is a calibration, and what is not
   GOOD-ONLY POLICY: Bad (QC-failed) rows are removed immediately after the CSV
-  is read.  Every fit, figure and table below uses Good rows only.
+  is read.  Every fit and figure below uses Good rows only; the Bad rows are
+  only listed in Table S7.
   Primary offsets and slopes use Good points at T >= 270 K only.
   Primary slope family (6 tests, Bonferroni): AP613 2021, AP613 2025 and
   CAL1549, both isotopologues.  AP613 extended nests 2021, and the Eldridge
@@ -78,6 +87,11 @@ parser.add_argument("--repro12", type=float, default=1.2, help="long-term reprod
 parser.add_argument("--internal13", type=float, default=0.3, help="internal precision Delta13 (permil)")
 parser.add_argument("--internal12", type=float, default=2.4, help="internal precision Delta12 (permil)")
 parser.add_argument("--mc-draws", type=int, default=20000)
+parser.add_argument("--bridge", choices=("const", "smooth"), default="const",
+                    help="reference curve below 270 K: BMU + constant delta (default) or BMU + delta(T), "
+                         "linear in 1/T and continuous at 270 K")
+parser.add_argument("--sigma-T", type=float, default=2.0, dest="sigma_T",
+                    help="equilibration-temperature error (K) for the effective-variance sensitivity fits (Table S14)")
 parser.add_argument("--t-grid", default="50,100,150,200,300", help="true temperatures (C) for Table S8")
 args = parser.parse_args()
 
@@ -348,6 +362,30 @@ BMU_RMS = {
     "12": float(np.sqrt(np.mean((bmu12(_bmu_TK) - BMU_12) ** 2))),
 }
 
+# Smooth bridge (option): delta(T) = d270 + b (1/T - 1/270), forced through the
+# PIMC - BMU value at 270 K so the reference curve has no step at the join, with
+# b fitted by least squares on integer kelvin 270 to 423 (inside the PIMC range).
+# Below 270 K it is an extrapolation of a trend seen in the overlap, so it is a
+# member of the theory envelope, not a better curve.
+_SMOOTH_K = np.arange(270.0, 424.0)
+SM_D270, SM_B = {}, {}
+for _iso, _pimc, _bmu in (("13", pimc13, bmu13), ("12", pimc12, bmu12)):
+    _d = _pimc(_SMOOTH_K) - _bmu(_SMOOTH_K)
+    _x = 1.0 / _SMOOTH_K - 1.0 / 270.0
+    SM_D270[_iso] = float(_pimc(270.0) - _bmu(270.0))
+    SM_B[_iso] = float(np.sum((_d - SM_D270[_iso]) * _x) / np.sum(_x * _x))
+
+def smooth_delta(iso, TK):
+    TK = np.asarray(TK, dtype=float)
+    return SM_D270[iso] + SM_B[iso] * (1.0 / TK - 1.0 / 270.0)
+
+BRIDGE_MODE = args.bridge
+def bridge_delta(iso, TK):
+    """Shift added to the BMU fit below 270 K under the chosen bridge."""
+    if BRIDGE_MODE == "smooth":
+        return smooth_delta(iso, TK)
+    return np.full_like(np.asarray(TK, dtype=float), BD13 if iso == "13" else BD12)
+
 def _scalarize(TK, values):
     raw = np.asarray(TK, dtype=float)
     out = np.asarray(values, dtype=float)
@@ -357,11 +395,11 @@ def _scalarize(TK, values):
 
 def ref13(TK):
     TK = np.asarray(TK, dtype=float)
-    return _scalarize(TK, np.where(TK >= 270.0, pimc13(TK), np.asarray(bmu13(TK), dtype=float) + BD13))
+    return _scalarize(TK, np.where(TK >= 270.0, pimc13(TK), np.asarray(bmu13(TK), dtype=float) + bridge_delta("13", TK)))
 
 def ref12(TK):
     TK = np.asarray(TK, dtype=float)
-    return _scalarize(TK, np.where(TK >= 270.0, pimc12(TK), np.asarray(bmu12(TK), dtype=float) + BD12))
+    return _scalarize(TK, np.where(TK >= 270.0, pimc12(TK), np.asarray(bmu12(TK), dtype=float) + bridge_delta("12", TK)))
 
 REF = {"13": ref13, "12": ref12}     # reference curve (bridged BMU below 270 K)
 ALT = {"13": pimc13, "12": pimc12}   # the other low-T curve: PIMC extrapolated
@@ -371,11 +409,13 @@ BRIDGE = {"13": BD13, "12": BD12}
 
 # The constant-delta bridge is NOT continuous at 270 K (PIMC - BMU is T-dependent,
 # delta is a grid mean).  Report the step so residuals across the join are read correctly.
-JOIN_STEP = {"13": float(pimc13(270.0) - (bmu13(270.0) + BD13)),
-             "12": float(pimc12(270.0) - (bmu12(270.0) + BD12))}
+JOIN_STEP = {"13": float(pimc13(270.0) - (bmu13(270.0) + float(bridge_delta("13", 270.0)))),
+             "12": float(pimc12(270.0) - (bmu12(270.0) + float(bridge_delta("12", 270.0))))}
+print(f"[bridge] reference curve below 270 K: BMU + {'delta(T), linear in 1/T' if BRIDGE_MODE == 'smooth' else 'constant delta'}")
 print(f"[warn] reference-curve step at the 270 K join (above minus below): "
-      f"Δ13 {JOIN_STEP['13']:+.4f}‰, Δ12 {JOIN_STEP['12']:+.4f}‰ (systematic; "
-      "bracketed by the theory envelope in Table S6)")
+      f"Δ13 {JOIN_STEP['13']:+.4f}‰, Δ12 {JOIN_STEP['12']:+.4f}‰ ("
+      + ("zero by construction" if BRIDGE_MODE == "smooth" else "systematic")
+      + "; the choice of bridge is bracketed by the theory envelope in Table S6)")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 4. FITS (all recomputed from the CSV)
@@ -440,6 +480,60 @@ def fit_m2(pts, reff, space="lin"):
     return {"m": m, "se_m": se_m, "c": c, "se_c": se_c, "z": z,
             "p": t_two_sided_p(abs(z), n - 2), "chi2r": chi2r, "n": n,
             "ci95_lo": m - ci_half, "ci95_hi": m + ci_half}
+
+def _x_err(q, reff, sig_T):
+    """Error in the reference value caused by an error sig_T (K) in the
+    equilibration temperature: |d ref / d T| * sig_T, central difference 0.25 K."""
+    TK = q["T"] + 273.15
+    eps = 0.25
+    return abs(float(reff(TK + eps)) - float(reff(TK - eps))) / (2.0 * eps) * sig_T
+
+def fit_m1_T(pts, reff, sig_T):
+    """Method 1 with the temperature error in the weights (effective variance,
+    slope fixed at 1): var_i = se_i^2 + (d ref/dT * sig_T)^2.  Sensitivity only."""
+    sw = swr = 0.0; n = 0
+    var = []
+    for q in pts:
+        v = q["se"] ** 2 + _x_err(q, reff, sig_T) ** 2
+        var.append(v)
+        sw += 1.0 / v; swr += (q["y"] - float(reff(q["T"] + 273.15))) / v; n += 1
+    off = swr / sw
+    chi2 = sum((q["y"] - float(reff(q["T"] + 273.15)) - off) ** 2 / v for q, v in zip(pts, var))
+    chi2r = chi2 / (n - 1)
+    se = math.sqrt(1.0 / sw) * math.sqrt(max(1.0, chi2r))
+    return {"off": off, "se_infl": se, "n": n, "chi2r": chi2r}
+
+def fit_m2_T(pts, reff, sig_T, iters=200):
+    """Method 2 with errors in both variables, effective-variance form
+    (var_i = se_i^2 + m^2 sx_i^2, iterated on m).  Sensitivity only."""
+    n = len(pts)
+    X = [float(reff(q["T"] + 273.15)) for q in pts]
+    Y = [q["y"] for q in pts]
+    S2 = [q["se"] ** 2 for q in pts]
+    SX2 = [_x_err(q, reff, sig_T) ** 2 for q in pts]
+    m = 1.0
+    for _ in range(iters):
+        w = [1.0 / (a + m * m * b) for a, b in zip(S2, SX2)]
+        sw = sum(w); sx = sum(wi * x for wi, x in zip(w, X)); sy = sum(wi * y for wi, y in zip(w, Y))
+        sxx = sum(wi * x * x for wi, x in zip(w, X)); sxy = sum(wi * x * y for wi, x, y in zip(w, X, Y))
+        D = sw * sxx - sx * sx
+        m_new = (sw * sxy - sx * sy) / D
+        if abs(m_new - m) < 1e-12:
+            m = m_new
+            break
+        m = m_new
+    w = [1.0 / (a + m * m * b) for a, b in zip(S2, SX2)]
+    sw = sum(w); sx = sum(wi * x for wi, x in zip(w, X)); sy = sum(wi * y for wi, y in zip(w, Y))
+    sxx = sum(wi * x * x for wi, x in zip(w, X)); sxy = sum(wi * x * y for wi, x, y in zip(w, X, Y))
+    D = sw * sxx - sx * sx
+    m = (sw * sxy - sx * sy) / D
+    c = (sxx * sy - sx * sxy) / D
+    chi2 = sum(wi * (y - m * x - c) ** 2 for wi, x, y in zip(w, X, Y))
+    chi2r = chi2 / (n - 2)
+    se_m = math.sqrt(sw / D) * math.sqrt(max(1.0, chi2r))
+    z = (m - 1.0) / se_m
+    return {"m": m, "se_m": se_m, "c": c, "z": z, "p": t_two_sided_p(abs(z), n - 2),
+            "chi2r": chi2r, "n": n}
 
 VARIANTS = ["all", "valid", "alt", "ln"]   # no "+Bad" variant: Bad rows are excluded at load
 PTS = {(k, iso): get_pts(k, iso) for k in ALLKEYS for iso in ("13", "12")}
@@ -655,6 +749,7 @@ def theory_envelope(iso):
         delta = float(np.mean(pimc(grid) - fit(grid)))
         values[f"grid {lo:.0f}-{hi:.0f} K"] = float(fit(253.15) + delta)
     values["match PIMC at 270 K"] = float(fit(253.15) + (pimc(270.0) - fit(270.0)))
+    values["continuous 1/T bridge (forced through 270 K)"] = float(fit(253.15) + smooth_delta(iso, 253.15))
     values["PIMC polynomial extrapolated"] = float(pimc(253.15))
     vals = list(values.values())
     return values, min(vals), max(vals)
@@ -696,11 +791,45 @@ T_GRID_C = T_GRID_K - 273.15
 LOWT_C = 270.0 - 273.15
 XMIN, XMAX = -30.0, 560.0
 
+FIG_CAPTIONS = []   # (base, caption); printed at save time and added to the workbook
+
+CAPTIONS = {
+    "Fig1_Delta_vs_T":
+        "Figure 1. Delta13CH3D (left) and Delta12CH2D2 (right) of catalytically equilibrated gases "
+        "against equilibration temperature, all panels in the working-gas frame (AP613 2025 converted "
+        "by subtracting the 2021 raw-to-absolute shift). Dark curves: PIMC polynomials of Eldridge et al. "
+        "(2019) (solid from 270 K, dotted below), the harmonic (BMU) fit to their Table 4 (dashed), and the "
+        "reference curve. Coloured curves and bands: reference curve plus the Method-1 offset fitted at "
+        "T >= 270 K, +/- 1 SE. Filled symbols are in that fit; open symbols are not (T < 270 K, or the "
+        "withheld CAL1549 -20 C point). Grey region: T < 270 K, below the validated range of the PIMC "
+        "polynomials.",
+    "Fig2_residuals_vs_T":
+        "Figure 2. Residuals of measured Delta13CH3D (left) and Delta12CH2D2 (right) from the reference "
+        "curve plus the Method-1 offset fitted at T >= 270 K, against equilibration temperature. Error bars "
+        "are the measurement SE only (Table 2 gives the offset-aware z). Filled symbols are in the offset "
+        "fit; open symbols are not. Grey region: T < 270 K.",
+    "FigS3_low_temperature":
+        "Figure S3. Experiments at -20 C in the absolute frame: a kinetic constraint, not a calibration "
+        "point. Horizontal lines: reference curve at 253 K and the cylinder starting compositions. Points "
+        "with bars (measurement SE): AP613 after ~5 months; CAL1549 (5 months) as working-gas value minus "
+        "the fitted offset (filled) and its raw column (open). Only Good rows are shown.",
+    "FigS1_method2_regression":
+        "Figure S1. Method 2 (weighted line, measured on reference) in each series' own frame. Solid lines "
+        "and bands: T >= 270 K fit (primary). Dashed lines, where drawn: all Good points including below "
+        "270 K (sensitivity). Open symbols are not in the primary fit; black edges mark T < 270 K.",
+    "FigS2_shifted_by_offset":
+        "Figure S2. Each series minus its own Method-1 offset (T >= 270 K), in its own frame. Filled symbols "
+        "are in that fit; faded open symbols are not. Bands: +/- 1 SE of the offset. Grey region: T < 270 K.",
+}
+
 def save(fig, base):
     fig.savefig(os.path.join(OUT, base + ".pdf"))
     fig.savefig(os.path.join(OUT, base + ".png"), dpi=args.dpi)
     plt.close(fig)
     print(f"[fig ] {base}.pdf / .png")
+    caption = CAPTIONS.get(base, "")
+    FIG_CAPTIONS.append((base, caption))
+    print(f"[caption] {base}: {caption}")
 
 def draw_theory(ax, iso):
     ax.axvspan(XMIN, LOWT_C, color="grey", alpha=0.18, zorder=0)
@@ -749,11 +878,7 @@ def fig1():
         ax.axvline(LOWT_C, color="grey", lw=0.8, ls="--")
         h, l = ax.get_legend_handles_labels()
         ax.legend(h, l, fontsize=7.5, loc="upper right", framealpha=0.9)
-    fig.suptitle("Figure 1.  Working-gas frame (AP613 2025 minus the 2021 shift).  "
-                 "Curves: reference + Method-1 offset at T ≥ 270 K.  "
-                 "Filled symbols are in that fit; open symbols are not "
-                 "(T < 270 K or CAL1549 at −20 °C withheld; Bad rows are excluded at load).", fontsize=9)
-    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.tight_layout()
     save(fig, "Fig1_Delta_vs_T")
 
 def fig2():
@@ -776,11 +901,7 @@ def fig2():
         ax.set_xlabel("equilibration temperature (°C)")
         ax.set_ylabel(f"residual {ISO_LAB[iso]} (‰)")
         ax.set_xlim(XMIN, XMAX)
-    fig.suptitle("Figure 2.  Residual from the reference curve + the T ≥ 270 K offset.  "
-                 "Error bars are the measurement SE only (Table 2 also gives the "
-                 "offset-aware z).  Filled: in the offset fit.  Open: not in the fit.  "
-                 "Grey: T < 270 K.", fontsize=9)
-    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.tight_layout()
     save(fig, "Fig2_residuals_vs_T")
 
 def figS3():
@@ -839,18 +960,9 @@ def figS3():
         f"Δ¹² {plotted_values['12'][key]:.2f}‰"
         for key in legend_keys
     ]
-    fig.legend(handles, legend_labels, fontsize=7.5, loc="lower center", ncol=2,
+    fig.legend(handles, legend_labels, fontsize=7.5, loc="lower center", ncol=3,
                bbox_to_anchor=(0.5, 0.01), frameon=False)
-    axes[0].set_title("Δ¹³CH₃D")
-    axes[1].set_title("Δ¹²CH₂D₂")
-    fig.suptitle("Figure S3.  −20 °C in the absolute frame: a kinetic constraint, not a calibration point",
-                 fontsize=11)
-    fig.text(0.5, 0.93, "Bars are measurement SE.  Only Good rows are shown (Bad rows were dropped at load).  "
-             "The two AP613 points share one duration string and may be replicates of one tube.  "
-             "CAL1549 is withheld from every fit; the open symbol is the raw column, "
-             "the filled symbol is working-gas value minus the fitted offset.",
-             ha="center", fontsize=8)
-    fig.tight_layout(rect=[0, 0.12, 1, 0.90])
+    fig.tight_layout(rect=[0, 0.10, 1, 1.0])
     save(fig, "FigS3_low_temperature")
 
 def figS1():
@@ -883,11 +995,8 @@ def figS1():
                             color=COLOR[k], alpha=0.12, lw=0)
         ax.set_xlabel(f"reference-curve {ISO_LAB[iso]} (‰)")
         ax.set_ylabel(f"measured {ISO_LAB[iso]} (‰, own frame)")
-        ax.legend(fontsize=6.6, loc="best", framealpha=0.9)
-    fig.suptitle("Figure S1.  Method 2 in each series' own frame.  Solid lines and bands are the "
-                 "T ≥ 270 K fit (primary).  Dashed lines, where drawn, include Good points below 270 K.  "
-                 "Open symbols are not in the primary fit; black edges mark T < 270 K.", fontsize=9)
-    fig.tight_layout(rect=[0, 0, 1, 0.92])
+        ax.legend(fontsize=6.6, loc="upper left", framealpha=0.9)
+    fig.tight_layout()
     save(fig, "FigS1_method2_regression")
 
 def figS2():
@@ -911,16 +1020,32 @@ def figS2():
         ax.set_ylabel(f"{ISO_LAB[iso]} shifted by own offset (‰)")
         ax.set_xlim(XMIN, XMAX)
         ax.axvline(LOWT_C, color="grey", lw=0.8, ls="--")
-    fig.suptitle("Figure S2.  Each series minus its own Method-1 offset (T ≥ 270 K), own frame.  "
-                 "Filled symbols are in that fit.  Faded open symbols are not.  "
-                 "Bands: ±1σ of the offset.  Grey: T < 270 K.", fontsize=9)
-    fig.tight_layout(rect=[0, 0, 1, 0.94])
+    fig.tight_layout()
     save(fig, "FigS2_shifted_by_offset")
 
 # ─────────────────────────────────────────────────────────────────────────────
 # 8. TABLES (collected into one Excel workbook)
 # ─────────────────────────────────────────────────────────────────────────────
 TABLES = {}
+
+TABLE_CAPTIONS = {
+    "Table1": "Primary Method-1 offsets and Method-2 slopes for this-study experiments at T >= 270 K.",
+    "Table2": "This-study experiments at or below 25 °C, with measured anomalies, residuals, and equilibration fractions.",
+    "TableS1": "Experimental protocol, duration, quality flag, and fit-withholding status for each row.",
+    "TableS2": "Method-1 offsets using all Good points and the validated T >= 270 K subset.",
+    "TableS3": "Method-2 slope regressions using all Good points, including low-temperature sensitivity points.",
+    "TableS4": "Method-2 slope sensitivity to fit range and reference-curve choice.",
+    "TableS5": "Comparison of AP613 campaign offsets and slopes across fit choices.",
+    "TableS6": "Low-temperature reference bounds, AP613 results, and inferred apparent temperatures at -20 °C.",
+    "TableS7": "Rows in no fit: the Good row withheld (CAL1549, -20 °C) and the Bad-quality rows excluded at load, with recorded values and residuals.",
+    "TableS8": "Temperature-inversion uncertainty at selected true temperatures.",
+    "TableS9": "Eldridge et al. (2019) published benchmark slopes and comparison with refitted means.",
+    "TableS10": "Inverse-variance pooled Method-2 slopes, with and without Eldridge means.",
+    "TableS11": "Slope and offset sensitivity to dropping 550 °C data or individual -20 °C points.",
+    "TableS12": "Reference anomalies and their temperature sensitivity to ±2 °C errors.",
+    "TableS13": "Offsets and slopes for the external AP613 2021, AP613 extended, and Eldridge reference series.",
+    "TableS14": "Sensitivity of offsets and slopes to the equilibration-temperature error (effective-variance refits).",
+}
 
 def write_table(name, header, rows, footnotes=()):
     TABLES[name] = (header, rows, footnotes)
@@ -942,6 +1067,19 @@ def write_workbook(manifest_rows):
     sheets = {"Manifest": (["Item", "Value"], manifest_rows, ())}
     table_order = sorted(TABLES, key=lambda name: (0 if name in ("Table1", "Table2") else 1,
                                                     int(name.removeprefix("TableS")) if name.startswith("TableS") else 0))
+    missing_captions = sorted(set(TABLES) - set(TABLE_CAPTIONS))
+    if missing_captions:
+        raise ValueError(f"Missing table captions: {', '.join(missing_captions)}")
+    sheets["Figure captions"] = (
+        ["Figure", "Caption"],
+        [[base, caption] for base, caption in FIG_CAPTIONS],
+        (),
+    )
+    sheets["Table captions"] = (
+        ["Table", "Caption"],
+        [[name, TABLE_CAPTIONS[name]] for name in table_order],
+        (),
+    )
     sheets.update({name: TABLES[name] for name in table_order})
     for sheet_name, (header, rows, footnotes) in sheets.items():
         worksheet = manifest if sheet_name == "Manifest" else workbook.create_sheet(sheet_name)
@@ -1012,29 +1150,53 @@ def _scale_duration(number, unit):
     return number * _DAY_UNITS[key], "converted; months use 365.2425/12 days"
 
 def table1():
+    """Main Table 1: this study only (AP613 2025, CAL1549), both isotopologues.
+    AP613 2021, AP613 extended and Eldridge rows are in Table S13 (they are the
+    external/reference series shown in the figures)."""
     rows = []
-    role_of = {"siv": "primary", "das": "primary", "cal": "primary",
-               "apex": "consistency", "eld": "consistency"}
-    for k in ("siv", "das", "cal", "apex", "eld"):
-        role = role_of[k]
+    for k in ("das", "cal"):
         for iso in ("13", "12"):
             v = M2[(k, iso, "valid")]
             off, se = (OFF_WG[iso], SE_WG[iso]) if k == "das" else OFF[k][iso]
-            p_adj = adjusted_p(v["p"], role == "primary")
-            rows.append([NAME[k], role, ISO_LAB[iso], v["n"], f2(off), f2(se),
+            p_adj = adjusted_p(v["p"], True)
+            rows.append([NAME[k], "primary", ISO_LAB[iso], v["n"], f2(off), f2(se),
                          f3(v["m"]), f3(v["se_m"]), f3(v["ci95_lo"]), f3(v["ci95_hi"]),
-                         f"{v['z']:+.2f}", f4(v["p"]),
-                         "" if p_adj is None else f4(p_adj)])
+                         f"{v['z']:+.2f}", f4(v["p"]), f4(p_adj)])
     write_table("Table1",
                 ["data set", "role", "isotopologue", "n",
                  "offset (‰)", "SE offset (‰)", "slope m", "SE(m)",
                  "95% CI low", "95% CI high", "t", "p", "Bonferroni 6p"], rows,
                 footnotes=[
+                    "This-study data only; the AP613 2021 (Sivan et al. 2024), AP613 extended and Eldridge et al. (2019) rows are tabulated in Table S13 and shown in the figures.",
                     "Offset is Method 1 (slope fixed at 1) at T >= 270 K.  Slope is Method 2 on the same points.  The two are not the intercept and slope of one fit.  SE is inflated by sqrt(chi2r) when chi2r > 1.",
-                    "Primary family, 6 tests: AP613 2021, AP613 2025 and CAL1549, both isotopologues, T >= 270 K.  Adjusted p = min(1, 6p).  A CI that contains 1 is not a demonstration that the slope is 1.",
+                    "Primary family, 6 tests: AP613 2021, AP613 2025 and CAL1549, both isotopologues, T >= 270 K.  Adjusted p = min(1, 6p) also for the rows shown here; the AP613 2021 rows are in Table S13.  A CI that contains 1 is not a demonstration that the slope is 1.",
                     "AP613 2025 offset is the absolute-frame Method-1 offset minus the 2021 raw-to-absolute shift measured on the CSV.  The SE is the absolute-fit SE.  It does not include the shift scatter (see the manifest).  For Delta12 that shift is not equal to minus the 2021 Method-1 offset; the alternative is in the manifest and is not used here.",
-                    "Unmarked primary offsets are in the working-gas frame.  AP613 extended and Eldridge are in the absolute frame and are consistency checks, not members of the slope family.  Extended nests the 2021 anchor.  Eldridge's values were assigned from this PIMC calibration, and Table S9 refits published means rather than their individual analyses.",
-                    "Points below 270 K and the withheld CAL1549 -20 C row are not in this table.  Bad rows are excluded at load and appear in no table.",
+                    "Unmarked offsets are in the working-gas frame.  Points below 270 K and the withheld CAL1549 -20 C row are not in this table.  Bad rows are excluded at load and are listed in Table S7.",
+                ])
+
+def tableS13():
+    """Reference and consistency data sets (not this study): AP613 2021 (Sivan),
+    AP613 extended (pooled, nests the 2021 anchor) and Eldridge et al. 2019."""
+    rows = []
+    role_of = {"siv": "primary (external campaign)", "apex": "consistency", "eld": "consistency"}
+    for k in ("siv", "apex", "eld"):
+        role = role_of[k]
+        for iso in ("13", "12"):
+            v = M2[(k, iso, "valid")]
+            off, se = OFF[k][iso]
+            p_adj = adjusted_p(v["p"], role.startswith("primary"))
+            rows.append([NAME[k], role, ISO_LAB[iso], v["n"], f2(off), f2(se),
+                         f3(v["m"]), f3(v["se_m"]), f3(v["ci95_lo"]), f3(v["ci95_hi"]),
+                         f"{v['z']:+.2f}", f4(v["p"]),
+                         "" if p_adj is None else f4(p_adj)])
+    write_table("TableS13",
+                ["data set", "role", "isotopologue", "n",
+                 "offset (‰)", "SE offset (‰)", "slope m", "SE(m)",
+                 "95% CI low", "95% CI high", "t", "p", "Bonferroni 6p"], rows,
+                footnotes=[
+                    "Not this study: AP613 2021 is the Sivan et al. (2024) campaign, AP613 extended pools both AP613 campaigns on the absolute scale and nests the 2021 anchor, and the Eldridge et al. (2019) means were assigned from their own PIMC calibration (offset ~ 0 by construction).  They are consistency checks shown in the figures; only AP613 2021 belongs to the six-test primary family.",
+                    "AP613 extended and Eldridge offsets are in the absolute frame; AP613 2021 is in its raw working-gas frame.",
+                    "Eldridge slopes refit published means rather than their individual analyses (Table S9).",
                 ])
 
 def table2_and_S6():
@@ -1045,6 +1207,8 @@ def table2_and_S6():
     for r in sorted(ROWS, key=lambda r: (r["dataset"], float(r["T_C"]))):
         if float(r["T_C"]) > 25.0:
             continue
+        if key_of(r["dataset"]) == "eld":
+            continue   # external data (Eldridge 2019 means): shown in figures, tabulated in Table S9
         out = [ds_label(r), r["T_C"], r["catalyst"], r["duration"], r["flag"],
                "yes" if in_offset_fit(r) else "no",
                "yes" if is_withheld(r) else "no"]
@@ -1062,7 +1226,7 @@ def table2_and_S6():
         "z meas = residual / measurement SE.  It ignores the offset uncertainty and is too small a denominator for the -20 C deficit.",
         "z with offset = residual / hypot(measurement SE, T>=270 K offset SE).  Blank when the point is inside that offset fit, because the offset is then not an independent error.",
         "frac is Eq. (5) in the working-gas frame, where the cylinder is 0.  AP613 2025 is converted with the 2021 shift.  The fraction SE includes the measurement and the offset, not the theory error and not the shift scatter.",
-        "Blank fractions: Eldridge means have no cylinder zero in this table; a non-positive distance from the cylinder to the reference is undefined.  Bad rows are excluded at load and do not appear in this table.",
+        "This-study Good rows only.  External data (Eldridge et al. 2019 means at and below 25 C) are shown in the figures and tabulated in Table S9; Bad rows are excluded at load and listed in Table S7.",
         "CAL1549 at -20 C is withheld from every fit.  Do not read its Delta13 residual as agreement with the curve.",
     ])
 
@@ -1071,11 +1235,15 @@ def tableS1():
     for r in ROWS:
         days, note = duration_to_days(r["duration"])
         rows.append([ds_label(r), r["T_C"], r["catalyst"], r["duration"],
-                     "" if days is None else f"{days:.2f}", note,
+                     "" if days is None else f"{days:.2f}",
+                     "" if days is None else f"{24.0 * days:.1f}", note,
                      r["flag"], "yes" if is_withheld(r) else "no"])
+        if days is None and key_of(r["dataset"]) != "eld":
+            print(f"[warn] duration not numeric: {ds_label(r)} T={r['T_C']} C duration='{r['duration']}' ({note}); "
+                  "archive it in hours in the CSV")
     write_table("TableS1",
                 ["data set", "T (°C)", "catalyst", "duration as recorded",
-                 "duration (days)", "duration note", "flag", "withheld from fits"],
+                 "duration (days)", "duration (hours)", "duration note", "flag", "withheld from fits"],
                 rows,
                 footnotes=[
                     "Days are a convenience for comparing the cold experiments.  A range is its midpoint.  One month = 365.2425/12 days.  Eldridge durations have no unit in the CSV and are not converted.",
@@ -1240,13 +1408,18 @@ def tableS6(low):
     d12 = low["deficits"][("AP613 2025 offset", "12")]
     rows = [
         ["reference at -20 C", f"{low['ref13']:.3f}", f"{low['ref12']:.3f}",
-         "PIMC at and above 270 K; BMU fit + grid-mean delta below"],
+         ("PIMC at and above 270 K; BMU fit + delta(T), linear in 1/T, below (--bridge smooth)"
+          if BRIDGE_MODE == "smooth" else "PIMC at and above 270 K; BMU fit + grid-mean delta below")],
         ["PIMC polynomial extrapolated to 253.15 K", f"{low['pimc13']:.3f}", f"{low['pimc12']:.3f}",
          "outside the published 270-800 K range"],
         ["theory envelope min", f"{low['env13_lo']:.3f}", f"{low['env12_lo']:.3f}",
-         "grid-mean bridges, match at 270 K, and extrapolated PIMC"],
+         "grid-mean bridges, match at 270 K, continuous 1/T bridge, and extrapolated PIMC"],
         ["theory envelope max", f"{low['env13_hi']:.3f}", f"{low['env12_hi']:.3f}",
          "systematic; not in the fit error bars"],
+        ["continuous 1/T bridge at 253.15 K",
+         f"{low['env13']['continuous 1/T bridge (forced through 270 K)']:.3f}",
+         f"{low['env12']['continuous 1/T bridge (forced through 270 K)']:.3f}",
+         "delta(T) = d270 + b (1/T - 1/270), forced through PIMC - BMU at 270 K (no step); a trend of the 270-423 K overlap extrapolated below the PIMC range, so a member of the envelope and not a better curve"],
         ["local slope (permil per K)", f"{low['slope13']:.4f}", f"{low['slope12']:.4f}",
          "central difference, 0.25 K"],
         ["change for +2 C / -2 C",
@@ -1326,6 +1499,41 @@ def tableS11():
                     "The -20 C leave-one-out is on the all-Good AP613-extended fit, which is a sensitivity.  Dropping either point alone leaves the other at the same temperature, so the slope hardly moves; dropping both releases it.  The two single-point changes are not supposed to sum to the joint change.",
                 ])
 
+T_SENS = {}   # (k, iso, variant) -> baseline and temperature-error fits (filled by tableS14)
+
+def tableS14():
+    """Sensitivity: equilibration-temperature error in the weights.  The fits of
+    Table 1 and S2-S4 have no such error; here var_i = se_i^2 + (d ref/dT * sigma_T)^2
+    (Method 1) and the effective-variance form for Method 2.  Not a confirmatory test."""
+    rows = []
+    for k in ("siv", "das", "cal", "apex", "eld"):
+        for iso in ("13", "12"):
+            for v, vlab in (("valid", "T>=270K"), ("all", "all Good")):
+                pts = subset(PTS[(k, iso)], v)
+                if len(pts) < 4:
+                    continue
+                b1, b2 = M1[(k, iso, v)], M2[(k, iso, v)]
+                t1 = fit_m1_T(pts, REF[iso], args.sigma_T)
+                t2 = fit_m2_T(pts, REF[iso], args.sigma_T)
+                T_SENS[(k, iso, v)] = {"d_off": t1["off"] - b1["off"], "d_m": t2["m"] - b2["m"],
+                                       "se_off0": b1["se_infl"], "se_off1": t1["se_infl"],
+                                       "se_m0": b2["se_m"], "se_m1": t2["se_m"]}
+                rows.append([NAME[k], ISO_LAB[iso], vlab, b1["n"],
+                             f2(b1["off"]), f2(b1["se_infl"]), f2(t1["off"]), f2(t1["se_infl"]),
+                             f"{t1['off'] - b1['off']:+.3f}",
+                             f3(b2["m"]), f3(b2["se_m"]), f3(t2["m"]), f3(t2["se_m"]),
+                             f"{t2['m'] - b2['m']:+.3f}"])
+    write_table("TableS14",
+                ["data set", "isotopologue", "fit range", "n",
+                 "offset (‰)", "SE", f"offset, sigma_T = {args.sigma_T:g} K (‰)", "SE",
+                 "change in offset (‰)",
+                 "slope m", "SE(m)", f"slope, sigma_T = {args.sigma_T:g} K", "SE(m)",
+                 "change in slope"], rows,
+                footnotes=[
+                    f"Sensitivity only.  An error of {args.sigma_T:g} K in the equilibration temperature is converted to an error in the reference value (|d ref / dT| x sigma_T; Table S12) and added to each point's variance; Method 2 uses the effective-variance form with an iterated slope.  The fits of Table 1 and Tables S2-S4 do not include this error.",
+                    "The error matters most where the curve is steep, so the 'all Good' rows, which contain the -20 C points, move more than the T >= 270 K rows.  Frames are as in Table S13 (AP613 2025, AP613 extended and Eldridge in the absolute frame).",
+                ])
+
 def tableS12():
     rows = []
     for T in (-20.0, 1.2, 25.0, 50.0, 100.0, 300.0):
@@ -1364,21 +1572,41 @@ def tableS5():
                  "ANCOVA m", "SE(m)", "ANCOVA intercept diff (‰)", "SE", "p"], rows)
 
 def tableS7():
-    # Bad rows were removed at load; only rows withheld from fits remain here.
-    header = ["data set", "T (°C)", "duration", "status", "Δ13 (‰)", "resid13 (‰)", "z13",
-              "Δ12 (‰)", "resid12 (‰)", "z12"]
-    rows = []
-    for r in ROWS:
-        if not is_withheld(r):
-            continue
-        out = [ds_label(r), r["T_C"], r["duration"], "withheld from fits"]
+    """Rows that are in no fit: Good rows withheld (CAL1549 at -20 C) and the Bad
+    (QC-failed) rows dropped at load.  The Bad rows are shown with their recorded
+    values and their residuals from the reference curve plus the own-data-set
+    offset, so that the QC flag can be compared with the residuals.  They enter
+    no fit, figure or other table."""
+    header = ["data set", "T (°C)", "catalyst", "duration", "status",
+              "Δ13 (‰)", "SE13", "resid13 (‰)", "z13", "Δ12 (‰)", "SE12", "resid12 (‰)", "z12"]
+    def line(r, status):
+        out = [ds_label(r), r["T_C"], r["catalyst"], r["duration"], status]
         for iso in ("13", "12"):
             v, e = val(r, iso), sev(r, iso)
             rr = resid(r, iso)
-            out += [f2(v), f2(rr), ("" if rr is None or not e else f"{rr / e:+.1f}")]
-        rows.append(out)
+            out += [f2(v), f2(e), f2(rr), ("" if rr is None or not e else f"{rr / e:+.1f}")]
+        return out
+    rows = [line(r, "Good, withheld from fits") for r in ROWS if is_withheld(r)]
+    rows += [line(r, "Bad (QC), excluded at load")
+             for r in sorted(BAD_ROWS, key=lambda r: (ds_label(r), float(r["T_C"])))]
+
+    def z_list(rs, iso):
+        zs = []
+        for r in rs:
+            rr, e = resid(r, iso), sev(r, iso)
+            if rr is not None and e:
+                zs.append(rr / e)
+        return zs
+    good_ref = [r for r in ROWS if key_of(r["dataset"]) != "eld" and not is_withheld(r)]
+    diag = []
+    for iso in ("13", "12"):
+        zb, zg = z_list(BAD_ROWS, iso), z_list(good_ref, iso)
+        diag.append(f"Δ{iso}: {sum(abs(z) > 2 for z in zb)} of {len(zb)} Bad rows and "
+                    f"{sum(abs(z) > 2 for z in zg)} of {len(zg)} Good rows")
     write_table("TableS7", header, rows, footnotes=[
-        "Rows withheld from every fit.  Bad (QC-failed) rows are listed nowhere: they are dropped at load, before any fit, figure or table.",
+        "Good rows withheld from every fit, and Bad (QC-failed) rows dropped at load.  Bad rows are in no fit, figure or other table; their residuals use the offset fitted to the Good rows of the same data set.",
+        "Descriptive check of the flags, not a test.  z = residual / measurement SE (offset error not included); Good rows are the this-study and AP613 2021 rows that are not withheld.  Rows with |z| > 2: "
+        + "; ".join(diag) + ".",
     ])
 
 def tableS8():
@@ -1469,8 +1697,8 @@ if R and "theory" in R:
 
 fig1(); fig2(); figS1(); figS2(); figS3()
 LOW_T = low_temperature_summary()
-table1(); table2_and_S6(); tableS1(); tableS2(); tableS3(); tableS4(); tableS5()
-tableS6(LOW_T); tableS7(); tableS8(); tableS9(); tableS10(); tableS11(); tableS12()
+table1(); tableS13(); table2_and_S6(); tableS1(); tableS2(); tableS3(); tableS4(); tableS5()
+tableS6(LOW_T); tableS7(); tableS8(); tableS9(); tableS10(); tableS11(); tableS12(); tableS14()
 
 def pool_working_gas(iso):
     return ivw((OFF["siv"][iso][0], OFF_WG[iso]), (OFF["siv"][iso][1], SE_WG[iso]))
@@ -1485,11 +1713,30 @@ anc = camp["ancova"]
 anc_lo = anc["dc"] - inv_norm(0.975) * anc["se_dc"]
 anc_hi = anc["dc"] + inv_norm(0.975) * anc["se_dc"]
 
+def _cross(delta, iso):
+    """Temperature (C) at which the reference curve equals a starting composition."""
+    t = invert_curve(delta, iso)
+    return "outside the 200-1000 K search range" if t is None else f"{t:.0f} C"
+
+_starts = {"AP613": {"13": SHIFT["13"], "12": SHIFT["12"]},
+           "CAL1549": {"13": -OFF["cal"]["13"][0], "12": -OFF["cal"]["12"][0]}}
+_ref_cold = {"13": LOW_T["ref13"], "12": LOW_T["ref12"]}
+_cold_from_below = all(_ref_cold[iso] > _starts[g][iso] for g in _starts for iso in ("13", "12"))
+
+def _sens_max(variant):
+    d_off = [abs(v["d_off"]) for (k, iso, vv), v in T_SENS.items() if vv == variant and k != "eld"]
+    d_m = [abs(v["d_m"]) for (k, iso, vv), v in T_SENS.items() if vv == variant and k != "eld"]
+    return (max(d_off) if d_off else float("nan")), (max(d_m) if d_m else float("nan"))
+_so_v, _sm_v = _sens_max("valid")
+_so_a, _sm_a = _sens_max("all")
+
 manifest_rows = [
-    ["Generator", "AMT outputs from make_AMT_outputs.py (Good-only revision).  Setpoint of the cold experiments: -20 C (253.15 K)."],
+    ["Generator", "AMT outputs from make_AMT_outputs.py (Good-only revision).  Setpoint of the cold experiments: -20 C (253.15 K).  "
+                  f"Reference curve below 270 K: BMU + {'delta(T), linear in 1/T and continuous at 270 K (--bridge smooth)' if BRIDGE_MODE == 'smooth' else 'constant delta (--bridge const, default)'}."],
     ["QC filter (Good only)",
      f"{len(ROWS)} Good rows are used in every fit, figure and table.  {len(BAD_ROWS)} Bad rows dropped at load: "
-     + ("; ".join(f"{ds_label(r)} T={r['T_C']} C" for r in BAD_ROWS) if BAD_ROWS else "none") + "."],
+     + ("; ".join(f"{ds_label(r)} T={r['T_C']} C" for r in BAD_ROWS) if BAD_ROWS else "none")
+     + ".  The Bad rows are listed, with recorded values and residuals, in Table S7 only."],
     ["Input CSV", args.csv],
     ["Optional JSON", (json_path if R else "none") + " (Eldridge published benchmark only; curve recomputed)"],
     ["Primary slope family",
@@ -1510,7 +1757,14 @@ manifest_rows = [
      + f".  rms Δ13 {BMU_RMS['13']:.4f}‰, Δ12 {BMU_RMS['12']:.4f}‰."],
     ["Bridge delta, integer K 283 through 423", f"Δ13 {BD13:+.4f}‰, Δ12 {BD12:+.4f}‰"],
     ["Reference-curve step at the 270 K join",
-     f"Δ13 {JOIN_STEP['13']:+.4f}‰, Δ12 {JOIN_STEP['12']:+.4f}‰ (above minus below).  Systematic: the constant-delta bridge is not continuous at 270 K; the theory envelope in Table S6 brackets it."],
+     f"Δ13 {JOIN_STEP['13']:+.4f}‰, Δ12 {JOIN_STEP['12']:+.4f}‰ (above minus below).  "
+     + ("Zero by construction under --bridge smooth.  " if BRIDGE_MODE == "smooth" else
+        "Systematic: the constant-delta bridge is not continuous at 270 K.  ")
+     + "The theory envelope in Table S6 brackets the choice of bridge."],
+    ["Smooth (continuous) bridge parameters, integer K 270 through 423",
+     f"Δ13 d270 {SM_D270['13']:+.4f}‰, b {SM_B['13']:+.2f} ‰ K; Δ12 d270 {SM_D270['12']:+.4f}‰, b {SM_B['12']:+.2f} ‰ K.  "
+     f"At -20 C: Δ13 {LOW_T['env13']['continuous 1/T bridge (forced through 270 K)']:.3f}‰, "
+     f"Δ12 {LOW_T['env12']['continuous 1/T bridge (forced through 270 K)']:.3f}‰ (a member of the theory envelope, not used for the reference unless --bridge smooth)."],
     ["Reference at -20 C", f"Δ13 {LOW_T['ref13']:.3f}‰, Δ12 {LOW_T['ref12']:.3f}‰"],
     ["Theory envelope at -20 C",
      f"Δ13 {LOW_T['env13_lo']:.3f} to {LOW_T['env13_hi']:.3f}‰; "
@@ -1551,8 +1805,10 @@ manifest_rows = [
     ["550 C sensitivity",
      "Table S11.  Bulk delta-D at 550 C is not explained by this CSV; the refit is the quantitative check."],
     ["Temperature error",
-     "±2 C is not in the fit.  At -20 C, +2 C moves the reference by "
-     f"{LOW_T['slope13']*2:+.3f}‰ (Δ13) and {LOW_T['slope12']*2:+.3f}‰ (Δ12).  Table S12."],
+     "±2 C is not in the fit weights of Table 1 and Tables S2-S4.  At -20 C, +2 C moves the reference by "
+     f"{LOW_T['slope13']*2:+.3f}‰ (Δ13) and {LOW_T['slope12']*2:+.3f}‰ (Δ12).  Table S12.  "
+     f"Table S14 refits with sigma_T = {args.sigma_T:g} K in the weights; the largest change (this study and AP613 2021/extended) is "
+     f"{_so_v:.3f}‰ in offset and {_sm_v:.3f} in slope for the T>=270 K fits, and {_so_a:.3f}‰ and {_sm_a:.3f} for the all-Good fits."],
     ["Table S8",
      "68% half-widths, not one interval 'from 7 to 13 C'.  "
      f"Reproducibility {args.repro13}/{args.repro12}‰ can be tighter than the internal SE "
@@ -1561,17 +1817,33 @@ manifest_rows = [
      "Figure 1 is entirely in the working-gas frame.  AP613 2025 and Eldridge fits are absolute; "
      "Figure S1 keeps each series in its own frame and draws the T>=270 K line as the primary fit."],
     ["Cylinder start vs reference (absolute frame)",
-     f"AP613 start = +{SHIFT['13']:.3f}/+{SHIFT['12']:.3f} permil; "
-     f"CAL1549 start = +{-OFF['cal']['13'][0]:.3f}/+{-OFF['cal']['12'][0]:.3f} permil.  "
-     "Both cylinders lie below the reference curve over the whole experimental range, so the approach "
-     "to equilibrium is from below; the -20 C lower-bound argument assumes this monotonic approach from below."],
+     f"AP613 start = +{_starts['AP613']['13']:.3f}/+{_starts['AP613']['12']:.3f} permil; "
+     f"CAL1549 start = +{_starts['CAL1549']['13']:.3f}/+{_starts['CAL1549']['12']:.3f} permil.  "
+     + (f"At -20 C the reference ({_ref_cold['13']:.2f}/{_ref_cold['12']:.2f}) lies above all four starting values, so the "
+        "approach to equilibrium is from below there and the lower-bound argument applies.  "
+        if _cold_from_below else
+        "At -20 C the reference does NOT lie above every starting value: the approach-from-below argument fails for at least one cylinder.  ")
+     + "This is not true over the whole experimental range.  The reference curve falls to the starting composition at "
+       f"{_cross(_starts['AP613']['13'], '13')} (Δ13) and {_cross(_starts['AP613']['12'], '12')} (Δ12) for AP613, and at "
+       f"{_cross(_starts['CAL1549']['13'], '13')} (Δ13) and {_cross(_starts['CAL1549']['12'], '12')} (Δ12) for CAL1549; "
+       "above those temperatures the approach is from above.  The lower-bound argument is made at -20 C only."],
     ["Figures",
      "Fig1_Delta_vs_T, Fig2_residuals_vs_T, FigS1_method2_regression, "
-     "FigS2_shifted_by_offset, FigS3_low_temperature (.pdf + .png)"],
+     "FigS2_shifted_by_offset, FigS3_low_temperature (.pdf + .png).  "
+     "No titles are drawn inside the figures (the manuscript supplies the captions); "
+     "each caption is printed when the figure is saved and included in the Figure captions workbook sheet."],
+    ["Captions",
+     "Figure captions and table captions are included as separate sheets in AMT_tables.xlsx; no caption text files are generated."],
+    ["Main tables",
+     "Table 1 and Table 2 contain this-study data only (AP613 2025, CAL1549).  "
+     "AP613 2021, AP613 extended and Eldridge et al. (2019) are reference/consistency series shown in the "
+     "figures and tabulated in Table S13 (and Table S9 for the Eldridge benchmark).  "
+     "Bad rows are excluded at load and listed in Table S7."],
 ]
 
 workbook_path = write_workbook(manifest_rows)
 legacy_text_outputs = [
+    "figure_captions.txt",
     "Table1_calibration_Tge270K.txt", "Table2_experiments_le25C.txt",
     "TableS1_protocol.txt", "TableS2_method1_offsets.txt", "TableS3_method2_allGood.txt",
     "TableS4_slopes_five_choices.txt", "TableS5_campaign_comparison.txt",
@@ -1583,4 +1855,4 @@ for filename in legacy_text_outputs:
     old_path = os.path.join(OUT, filename)
     if os.path.isfile(old_path):
         os.remove(old_path)
-print(f"[done] workbook -> {workbook_path} ({len(TABLES)} tables + Manifest sheet)")
+print(f"[done] workbook -> {workbook_path} ({len(TABLES)} tables + Manifest and caption sheets)")
